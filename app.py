@@ -67,6 +67,27 @@ def create_oauth_popup():
     error_message = None
     
     try:
+        # Check if credentials.json contains placeholder values
+        with open('credentials.json', 'r') as f:
+            creds_content = f.read()
+            if 'YOUR_CLIENT_ID' in creds_content or 'YOUR_CLIENT_SECRET' in creds_content:
+                error_message = """
+                <div style="
+                    background-color: #f8d7da;
+                    color: #721c24;
+                    padding: 20px;
+                    border-radius: 5px;
+                    text-align: center;
+                    margin: 20px auto;
+                    max-width: 600px;
+                ">
+                    <h3>Placeholder Credentials Detected</h3>
+                    <p>The credentials.json file contains placeholder values. You need to replace them with your actual OAuth client credentials from Google Cloud Console.</p>
+                    <p>Follow the instructions in the README.md file for detailed setup steps.</p>
+                </div>
+                """
+                raise ValueError("Placeholder credentials detected")
+        
         # Create a flow instance to manage the OAuth 2.0 Authorization Grant Flow
         flow = InstalledAppFlow.from_client_secrets_file(
             'credentials.json', SCOPES)
@@ -93,6 +114,26 @@ def create_oauth_popup():
         ">
             <h3>Missing credentials.json file</h3>
             <p>Please create a project in Google Cloud Console, enable the Search Console API, and download the OAuth credentials as 'credentials.json' to the project directory.</p>
+            <p>Follow the instructions in the README.md file for detailed setup steps.</p>
+        </div>
+        """
+    except ValueError as e:
+        # This is for the placeholder credentials error, which is already handled
+        pass
+    except Exception as e:
+        error_message = f"""
+        <div style="
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 20px;
+            border-radius: 5px;
+            text-align: center;
+            margin: 20px auto;
+            max-width: 600px;
+        ">
+            <h3>OAuth Client Error</h3>
+            <p>There was an error with your OAuth client credentials: {str(e)}</p>
+            <p>Make sure you've created valid OAuth credentials in Google Cloud Console and added the correct redirect URIs.</p>
             <p>Follow the instructions in the README.md file for detailed setup steps.</p>
         </div>
         """
