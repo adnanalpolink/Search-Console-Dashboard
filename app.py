@@ -12,6 +12,10 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 import os
 import pickle
+import json
+import base64
+import webbrowser
+from streamlit.components.v1 import html
 
 # Set page config
 st.set_page_config(
@@ -38,15 +42,114 @@ def get_credentials():
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)
-            creds = flow.run_local_server(port=8501)
+            # We'll handle this with a popup window in the main function
+            return None
             
+    return creds
+
+def create_oauth_popup():
+    """Create a popup window for OAuth authentication."""
+    # Create a flow instance to manage the OAuth 2.0 Authorization Grant Flow
+    flow = InstalledAppFlow.from_client_secrets_file(
+        'credentials.json', SCOPES)
+    
+    # Set up the flow to use a local server for the redirect
+    flow.redirect_uri = 'http://localhost:8501/callback'
+    
+    # Generate the authorization URL
+    auth_url, _ = flow.authorization_url(
+        access_type='offline',
+        include_granted_scopes='true'
+    )
+    
+    # JavaScript to open a popup window
+    js_code = f"""
+    <script>
+    function openPopup() {{
+        var popup = window.open(
+            "{auth_url}", 
+            "Google Authentication",
+            "width=800,height=600,status=yes,scrollbars=yes,resizable=yes"
+        );
+        
+        // Check if popup was blocked
+        if (!popup || popup.closed || typeof popup.closed=='undefined') {{
+            alert("Popup blocked! Please allow popups for this site.");
+        }}
+        
+        // Poll for changes in the URL of the popup
+        var pollTimer = window.setInterval(function() {{
+            try {{
+                // If the popup is closed, stop polling
+                if (popup.closed) {{
+                    window.clearInterval(pollTimer);
+                    window.location.reload();
+                }}
+                
+                // If we can access the URL and it contains 'code=', the auth is complete
+                if (popup.location.href.includes('code=')) {{
+                    window.clearInterval(pollTimer);
+                    popup.close();
+                    window.location.reload();
+                }}
+            }} catch(e) {{
+                // Permission denied, keep polling
+            }}
+        }}, 500);
+    }}
+    </script>
+    <button onclick="openPopup()" style="
+        background-color: #4285F4;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        font-size: 16px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    ">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 48 48" style="margin-right: 10px;">
+            <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/>
+            <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/>
+            <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"/>
+            <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"/>
+        </svg>
+        Authenticate with Google
+    </button>
+    """
+    
+    return js_code
+
+def handle_oauth_callback():
+    """Handle the OAuth callback and save credentials."""
+    # Get the authorization code from the URL
+    query_params = st.experimental_get_query_params()
+    if 'code' in query_params:
+        auth_code = query_params['code'][0]
+        
+        # Create a flow instance
+        flow = InstalledAppFlow.from_client_secrets_file(
+            'credentials.json', SCOPES)
+        flow.redirect_uri = 'http://localhost:8501/callback'
+        
+        # Exchange the authorization code for credentials
+        flow.fetch_token(code=auth_code)
+        creds = flow.credentials
+        
         # Save the credentials for the next run
         with open('token.pickle', 'wb') as token:
             pickle.dump(creds, token)
-            
-    return creds
+        
+        # Clear the URL parameters
+        st.experimental_set_query_params()
+        
+        return creds
+    
+    return None
 
 def get_search_console_service():
     """Build the Search Console service."""
@@ -112,19 +215,36 @@ def main():
         st.session_state.service = None
     if 'selected_site' not in st.session_state:
         st.session_state.selected_site = None
-        
-    # Authentication section
-    st.sidebar.header("Authentication")
     
+    # Check if we're on the callback route
+    query_params = st.experimental_get_query_params()
+    if 'code' in query_params:
+        with st.spinner("Completing authentication..."):
+            creds = handle_oauth_callback()
+            if creds:
+                st.session_state.service = build('searchconsole', 'v1', credentials=creds)
+                st.session_state.authenticated = True
+                st.success("Authentication successful!")
+                st.experimental_rerun()
+    
+    # Authentication section
     if not st.session_state.authenticated:
         st.info("Please authenticate with Google to access Search Console data.")
-        if st.sidebar.button("Authenticate with Google"):
+        
+        # Try to get credentials silently first
+        creds = get_credentials()
+        if creds:
             try:
-                st.session_state.service = get_search_console_service()
+                st.session_state.service = build('searchconsole', 'v1', credentials=creds)
                 st.session_state.authenticated = True
                 st.experimental_rerun()
             except Exception as e:
                 st.error(f"Authentication failed: {e}")
+        else:
+            # Display the authentication button in the center
+            st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
+            html(create_oauth_popup(), height=80)
+            st.markdown("</div>", unsafe_allow_html=True)
     else:
         st.sidebar.success("Successfully authenticated!")
         
