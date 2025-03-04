@@ -49,6 +49,9 @@ def get_credentials():
 
 def create_oauth_popup():
     """Create a popup window for OAuth authentication."""
+    auth_url = None
+    error_message = None
+    
     try:
         # Create a flow instance to manage the OAuth 2.0 Authorization Grant Flow
         flow = InstalledAppFlow.from_client_secrets_file(
@@ -63,8 +66,7 @@ def create_oauth_popup():
             include_granted_scopes='true'
         )
     except FileNotFoundError:
-        # Return a message about missing credentials file
-        return """
+        error_message = """
         <div style="
             background-color: #f8d7da;
             color: #721c24;
@@ -81,9 +83,13 @@ def create_oauth_popup():
         """
     
     # JavaScript to open a popup window
-    js_code = f"""
+    js_code = """
     <script>
-    function openPopup() {{
+    function openPopup() {
+    """
+    
+    if auth_url:
+        js_code += f"""
         var popup = window.open(
             "{auth_url}", 
             "Google Authentication",
@@ -114,8 +120,23 @@ def create_oauth_popup():
                 // Permission denied, keep polling
             }}
         }}, 500);
-    }}
+        """
+    else:
+        js_code += """
+        alert("Missing credentials.json file. Please follow the setup instructions in the README.");
+        """
+    
+    js_code += """
+    }
     </script>
+    """
+    
+    # Add error message if there is one
+    if error_message:
+        js_code += error_message
+    
+    # Always add the button
+    js_code += """
     <button onclick="openPopup()" style="
         background-color: #4285F4;
         color: white;
