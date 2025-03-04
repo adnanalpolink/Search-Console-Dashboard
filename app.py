@@ -47,6 +47,20 @@ def get_credentials():
             
     return creds
 
+def is_streamlit_cloud():
+    """Check if the app is running on Streamlit Cloud."""
+    # Streamlit Cloud sets this environment variable
+    return os.environ.get('STREAMLIT_SHARING_MODE') == 'streamlit_cloud'
+
+def get_redirect_uri():
+    """Get the appropriate redirect URI based on the environment."""
+    if is_streamlit_cloud():
+        # For Streamlit Cloud deployment
+        return 'https://search-console-dashboard-ad.streamlit.app/callback'
+    else:
+        # For local development
+        return 'http://localhost:8501/callback'
+
 def create_oauth_popup():
     """Create a popup window for OAuth authentication."""
     auth_url = None
@@ -57,8 +71,9 @@ def create_oauth_popup():
         flow = InstalledAppFlow.from_client_secrets_file(
             'credentials.json', SCOPES)
         
-        # Set up the flow to use a local server for the redirect
-        flow.redirect_uri = 'http://localhost:8501/callback'
+        # Set up the flow to use the appropriate redirect URI
+        redirect_uri = get_redirect_uri()
+        flow.redirect_uri = redirect_uri
         
         # Generate the authorization URL
         auth_url, _ = flow.authorization_url(
@@ -173,7 +188,10 @@ def handle_oauth_callback():
             # Create a flow instance
             flow = InstalledAppFlow.from_client_secrets_file(
                 'credentials.json', SCOPES)
-            flow.redirect_uri = 'http://localhost:8501/callback'
+            
+            # Set up the flow to use the appropriate redirect URI
+            redirect_uri = get_redirect_uri()
+            flow.redirect_uri = redirect_uri
             
             # Exchange the authorization code for credentials
             flow.fetch_token(code=auth_code)
