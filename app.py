@@ -49,18 +49,36 @@ def get_credentials():
 
 def create_oauth_popup():
     """Create a popup window for OAuth authentication."""
-    # Create a flow instance to manage the OAuth 2.0 Authorization Grant Flow
-    flow = InstalledAppFlow.from_client_secrets_file(
-        'credentials.json', SCOPES)
-    
-    # Set up the flow to use a local server for the redirect
-    flow.redirect_uri = 'http://localhost:8501/callback'
-    
-    # Generate the authorization URL
-    auth_url, _ = flow.authorization_url(
-        access_type='offline',
-        include_granted_scopes='true'
-    )
+    try:
+        # Create a flow instance to manage the OAuth 2.0 Authorization Grant Flow
+        flow = InstalledAppFlow.from_client_secrets_file(
+            'credentials.json', SCOPES)
+        
+        # Set up the flow to use a local server for the redirect
+        flow.redirect_uri = 'http://localhost:8501/callback'
+        
+        # Generate the authorization URL
+        auth_url, _ = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true'
+        )
+    except FileNotFoundError:
+        # Return a message about missing credentials file
+        return """
+        <div style="
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 20px;
+            border-radius: 5px;
+            text-align: center;
+            margin: 20px auto;
+            max-width: 600px;
+        ">
+            <h3>Missing credentials.json file</h3>
+            <p>Please create a project in Google Cloud Console, enable the Search Console API, and download the OAuth credentials as 'credentials.json' to the project directory.</p>
+            <p>Follow the instructions in the README.md file for detailed setup steps.</p>
+        </div>
+        """
     
     # JavaScript to open a popup window
     js_code = f"""
@@ -126,28 +144,32 @@ def create_oauth_popup():
 
 def handle_oauth_callback():
     """Handle the OAuth callback and save credentials."""
-    # Get the authorization code from the URL
-    query_params = st.experimental_get_query_params()
-    if 'code' in query_params:
-        auth_code = query_params['code'][0]
-        
-        # Create a flow instance
-        flow = InstalledAppFlow.from_client_secrets_file(
-            'credentials.json', SCOPES)
-        flow.redirect_uri = 'http://localhost:8501/callback'
-        
-        # Exchange the authorization code for credentials
-        flow.fetch_token(code=auth_code)
-        creds = flow.credentials
-        
-        # Save the credentials for the next run
-        with open('token.pickle', 'wb') as token:
-            pickle.dump(creds, token)
-        
-        # Clear the URL parameters
-        st.experimental_set_query_params()
-        
-        return creds
+    try:
+        # Get the authorization code from the URL
+        if 'code' in st.query_params:
+            auth_code = st.query_params['code']
+            
+            # Create a flow instance
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'credentials.json', SCOPES)
+            flow.redirect_uri = 'http://localhost:8501/callback'
+            
+            # Exchange the authorization code for credentials
+            flow.fetch_token(code=auth_code)
+            creds = flow.credentials
+            
+            # Save the credentials for the next run
+            with open('token.pickle', 'wb') as token:
+                pickle.dump(creds, token)
+            
+            # Clear the URL parameters
+            st.query_params.clear()
+            
+            return creds
+    except FileNotFoundError:
+        st.error("Missing credentials.json file. Please follow the setup instructions in the README.")
+    except Exception as e:
+        st.error(f"Authentication error: {str(e)}")
     
     return None
 
@@ -217,8 +239,7 @@ def main():
         st.session_state.selected_site = None
     
     # Check if we're on the callback route
-    query_params = st.experimental_get_query_params()
-    if 'code' in query_params:
+    if 'code' in st.query_params:
         with st.spinner("Completing authentication..."):
             creds = handle_oauth_callback()
             if creds:
