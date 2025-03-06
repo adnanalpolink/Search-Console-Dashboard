@@ -28,7 +28,7 @@ CLIENT_CONFIG = {
         "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
         "token_uri": "https://oauth2.googleapis.com/token",
-        "redirect_uris": [os.getenv("REDIRECT_URI", "https://your-streamlit-app-url.streamlit.app")],
+        "redirect_uris": [os.getenv("REDIRECT_URI", "https://gsc-dashboard-ad.streamlit.app/")],
         "scopes": SCOPES
     }
 }
@@ -46,7 +46,7 @@ def authenticate():
         flow = Flow.from_client_config(
             CLIENT_CONFIG,
             scopes=SCOPES,
-            redirect_uri=os.getenv("REDIRECT_URI", "https://your-streamlit-app-url.streamlit.app")
+            redirect_uri=os.getenv("REDIRECT_URI", "https://gsc-dashboard-ad.streamlit.app/")
         )
         auth_url, _ = flow.authorization_url(
             access_type='offline',
